@@ -215,9 +215,8 @@ export async function appendFoodLogToSheets(
       timeZoneName: 'short',
     });
 
-    // 3. Render first image as thumbnail in the cell
-    const firstImageUrl = imageWebhookUrls && imageWebhookUrls.length > 0 ? imageWebhookUrls[0] : undefined;
-    const imageCellFormula = firstImageUrl ? `=IMAGE("${firstImageUrl}")` : 'N/A';
+    // Do not write the image link/formula to the Google Sheet
+    const imageCellFormula = 'N/A';
 
     // 4. Append the new row data
     const newRow = [
