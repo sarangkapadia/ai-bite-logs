@@ -25,6 +25,12 @@ const PORT = process.env.PORT || 3000;
 // Trust reverse proxy (e.g. Railway's load balancer) to ensure correct protocol detection for Twilio validation
 app.set('trust proxy', true);
 
+// Configure Admin phone numbers and API Authorization Token
+const ADMIN_PHONES = (process.env.ADMIN_PHONES || '+14082300841')
+  .split(',')
+  .map(p => p.trim().replace(/[^\d]/g, ''));
+const API_AUTH_TOKEN = process.env.API_AUTH_TOKEN || 'fallback_default_token';
+
 // Enable CORS for flexibility
 app.use(cors());
 
@@ -38,6 +44,48 @@ app.use('/images', express.static(path.join(__dirname, '../../public/images')));
 // A simple health check route
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'WhatsApp Food Log Webhook Server is running.' });
+});
+
+// POST /broadcast endpoint to broadcast custom messages to all users via API
+app.post('/broadcast', async (req, res) => {
+  const { message, token } = req.body;
+  const authHeader = req.headers.authorization;
+  const requestToken = token || (authHeader ? authHeader.replace('Bearer ', '').trim() : '');
+
+  if (!requestToken || requestToken !== API_AUTH_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized. Invalid or missing API token.' });
+  }
+
+  if (!message || typeof message !== 'string' || message.trim() === '') {
+    return res.status(400).json({ error: 'Bad Request. Message content is required.' });
+  }
+
+  console.log(`[Webhook Server] API Broadcast initiated: "${message}"`);
+  
+  res.status(202).json({ status: 'Accepted', message: 'Broadcast initiated in the background.' });
+
+  // Process broadcast asynchronously in background
+  (async () => {
+    try {
+      const activeTabs = await getAllUserTabs();
+      let sentCount = 0;
+      for (const tab of activeTabs) {
+        const titleParts = tab.title.split(' : ');
+        const phone = titleParts[1];
+        if (phone) {
+          try {
+            await sendProactiveWhatsAppMessage(phone, message);
+            sentCount++;
+          } catch (sendErr) {
+            console.error(`[Webhook Server] Failed to send API broadcast to ${phone}:`, sendErr);
+          }
+        }
+      }
+      console.log(`[Webhook Server] API Broadcast completed. Sent to ${sentCount} users.`);
+    } catch (err) {
+      console.error('[Webhook Server] Failed executing background API broadcast:', err);
+    }
+  })();
 });
 
 // Configure Twilio Webhook Signature Verification (only verify if explicitly requested)
@@ -232,6 +280,54 @@ app.post('/webhook', webhookMiddleware, async (req, res) => {
     const isOptInRequest = bodyText.includes('opt in') || bodyText.includes('start summary') || bodyText.includes('subscribe');
     const isSummaryRequest = bodyText.includes('summary') || bodyText.includes('report') || bodyText.includes('digest');
     const isInactivityRequest = bodyText === 'inspire' || bodyText === 'motivate' || bodyText === 'inactivity' || bodyText === 'inspiration';
+    const isBroadcastRequest = (Body || '').trim().toLowerCase().startsWith('broadcast:');
+
+    // Handle Admin Broadcast Command
+    if (isBroadcastRequest) {
+      const cleanSenderDigits = cleanedSender.replace(/[^\d]/g, '');
+      const isAdmin = ADMIN_PHONES.includes(cleanSenderDigits);
+
+      if (!isAdmin) {
+        console.warn(`[Webhook Server] Unauthorized broadcast attempt from ${cleanedSender}`);
+        return res.status(200).send(createTwiMLReply("⚠️ You are not authorized to initiate broadcast messages."));
+      }
+
+      const broadcastMsg = (Body || '').substring('broadcast:'.length).trim();
+      if (broadcastMsg === '') {
+        return res.status(200).send(createTwiMLReply("⚠️ Broadcast message cannot be empty. Syntax: broadcast: <message>"));
+      }
+
+      res.status(200).send(createTwiMLReply("📢 *Initiating broadcast to all registered users...*"));
+
+      (async () => {
+        try {
+          const activeTabs = await getAllUserTabs();
+          let sentCount = 0;
+          for (const tab of activeTabs) {
+            const titleParts = tab.title.split(' : ');
+            const phone = titleParts[1];
+            if (phone) {
+              const cleanDestPhone = phone.replace(/[^\d]/g, '');
+              // Avoid broadcasting to the sender to prevent spamming the admin
+              if (cleanDestPhone !== cleanSenderDigits) {
+                try {
+                  await sendProactiveWhatsAppMessage(phone, broadcastMsg);
+                  sentCount++;
+                } catch (sendErr) {
+                  console.error(`[Webhook Server] Failed to send WhatsApp broadcast to ${phone}:`, sendErr);
+                }
+              }
+            }
+          }
+          console.log(`[Webhook Server] WhatsApp Broadcast completed. Sent to ${sentCount} users.`);
+          await sendProactiveWhatsAppMessage(From, `✅ *Broadcast complete!* Sent to ${sentCount} users.`);
+        } catch (err) {
+          console.error('[Webhook Server] Failed executing background WhatsApp broadcast:', err);
+          await sendProactiveWhatsAppMessage(From, `❌ *Broadcast failed:* ${err instanceof Error ? err.message : err}`);
+        }
+      })();
+      return;
+    }
 
     // Handle On-Demand Inactivity/Inspiration Request
     if (isInactivityRequest) {
