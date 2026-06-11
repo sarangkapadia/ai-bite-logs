@@ -48,26 +48,59 @@ const webhookMiddleware = shouldVerifyTwilio
 
 // MCP Client logic
 let mcpClient: Client | null = null;
+let isConnecting = false;
 
-async function initMcpClient() {
+async function initMcpClientWithRetry(retries = 30, delayMs = 5000): Promise<void> {
+  if (isConnecting) return;
+  isConnecting = true;
+
   const mcpServerUrl = process.env.MCP_SERVER_URL || 'http://localhost:3001/sse';
-  console.log(`[Webhook Server] Connecting to standalone MCP Server over SSE: ${mcpServerUrl}`);
+  
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[Webhook Server] Connecting to standalone MCP Server over SSE: ${mcpServerUrl} (Attempt ${attempt}/${retries})`);
+      const transport = new SSEClientTransport(new URL(mcpServerUrl));
+      
+      const client = new Client(
+        {
+          name: "food-tracker-webhook-client",
+          version: "1.0.0"
+        },
+        {
+          capabilities: {}
+        }
+      );
 
-  const transport = new SSEClientTransport(new URL(mcpServerUrl));
+      await client.connect(transport);
+      console.log('[Webhook Server] Handshake complete, connected to MCP Server.');
+      mcpClient = client;
+      isConnecting = false;
 
-  const client = new Client(
-    {
-      name: "food-tracker-webhook-client",
-      version: "1.0.0"
-    },
-    {
-      capabilities: {}
+      // Handle connection close event
+      transport.onclose = () => {
+        console.warn('[Webhook Server] MCP Server connection closed. Resetting client.');
+        mcpClient = null;
+        // Trigger auto-reconnect sequence in the background
+        initMcpClientWithRetry(100, 5000).catch(() => {});
+      };
+      return;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[Webhook Server] Connection attempt ${attempt}/${retries} failed: ${errMsg}`);
+      if (attempt < retries) {
+        console.log(`[Webhook Server] Retrying in ${delayMs / 1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
     }
-  );
+  }
+  isConnecting = false;
+  throw new Error(`Failed to connect to MCP Server after ${retries} attempts.`);
+}
 
-  await client.connect(transport);
-  console.log('[Webhook Server] Handshake complete, connected to MCP Server.');
-  mcpClient = client;
+async function ensureMcpClientConnected(): Promise<void> {
+  if (mcpClient) return;
+  console.log('[Webhook Server] MCP Client not connected. Attempting initialization...');
+  await initMcpClientWithRetry(5, 2000);
 }
 
 function getSanitizedJsonRpcRequest(name: string, args: any, id: number) {
@@ -90,6 +123,7 @@ function getSanitizedJsonRpcRequest(name: string, args: any, id: number) {
 }
 
 async function callMcpTool(name: string, args: any): Promise<string> {
+  await ensureMcpClientConnected();
   if (!mcpClient) {
     throw new Error('MCP Client is not connected to the MCP Server.');
   }
@@ -127,6 +161,7 @@ async function callMcpTool(name: string, args: any): Promise<string> {
 }
 
 async function callMcpToolDetailed(name: string, args: any): Promise<any> {
+  await ensureMcpClientConnected();
   if (!mcpClient) {
     throw new Error('MCP Client is not connected to the MCP Server.');
   }
@@ -603,11 +638,10 @@ async function runDailyAutoSummaryJob(): Promise<void> {
 
 // Start the server and MCP connection
 async function startServer() {
-  try {
-    await initMcpClient();
-  } catch (err) {
-    console.error('Failed to initialize MCP Client, but starting server anyway:', err);
-  }
+  // Start the connection loop in the background so that Express can listen immediately
+  initMcpClientWithRetry(60, 5000).catch(err => {
+    console.error('[Webhook Server] Initial background connection to MCP Server failed:', err.message || err);
+  });
 
   app.listen(PORT, () => {
     console.log(`🚀 Server is listening on port ${PORT}`);
