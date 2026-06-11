@@ -193,10 +193,29 @@ app.post('/webhook', webhookMiddleware, async (req, res) => {
   // Case 1: No media was sent. Check if the user is requesting a nutrition summary report or changing settings.
   if (numMediaCount === 0) {
     const bodyText = (Body || '').trim().toLowerCase();
-
     const isOptOutRequest = bodyText.includes('opt out') || bodyText.includes('stop summary') || bodyText.includes('unsubscribe') || bodyText.includes('no summary');
     const isOptInRequest = bodyText.includes('opt in') || bodyText.includes('start summary') || bodyText.includes('subscribe');
     const isSummaryRequest = bodyText.includes('summary') || bodyText.includes('report') || bodyText.includes('digest');
+    const isInactivityRequest = bodyText === 'inspire' || bodyText === 'motivate' || bodyText === 'inactivity' || bodyText === 'inspiration';
+
+    // Handle On-Demand Inactivity/Inspiration Request
+    if (isInactivityRequest) {
+      res.status(200).send(createTwiMLReply("⏳ *Fetching inspiration from your logging history...* 🔍"));
+      (async () => {
+        try {
+          console.log(`[Webhook Server] On-demand inactivity check requested by ${cleanedSender}`);
+          const inspirationMsg = await callMcpTool("get_inactivity_inspiration", {
+            phone: cleanedSender,
+            profileName
+          });
+          await sendProactiveWhatsAppMessage(From, inspirationMsg, undefined, AccountSid);
+        } catch (err) {
+          console.error('[Webhook Server] Error generating on-demand inspiration:', err);
+          await sendProactiveWhatsAppMessage(From, "⚠️ Sorry, I ran into an error generating your inspiration reminder.", undefined, AccountSid);
+        }
+      })();
+      return;
+    }
 
     // Handle Opt-Out Request
     if (isOptOutRequest) {
