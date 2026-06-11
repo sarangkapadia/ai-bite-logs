@@ -22,6 +22,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust reverse proxy (e.g. Railway's load balancer) to ensure correct protocol detection for Twilio validation
+app.set('trust proxy', true);
+
 // Enable CORS for flexibility
 app.use(cors());
 
@@ -37,8 +40,8 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'WhatsApp Food Log Webhook Server is running.' });
 });
 
-// Configure Twilio Webhook Signature Verification
-const shouldVerifyTwilio = process.env.NODE_ENV === 'production' || process.env.TWILIO_VERIFY_SIGNATURE === 'true';
+// Configure Twilio Webhook Signature Verification (only verify if explicitly requested)
+const shouldVerifyTwilio = process.env.TWILIO_VERIFY_SIGNATURE === 'true';
 const webhookMiddleware = shouldVerifyTwilio
   ? twilio.webhook()
   : (req: express.Request, res: express.Response, next: express.NextFunction) => next();
