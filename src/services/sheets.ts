@@ -19,7 +19,7 @@ export async function appendFoodLogToSheets(
   info: FoodNutritionInfo,
   imageWebhookUrls?: string[],
   tabName: string = 'Sheet1'
-): Promise<{ streakCount: number }> {
+): Promise<{ streakCount: number; isFirstLogOfToday: boolean }> {
   const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = process.env.GOOGLE_PRIVATE_KEY;
@@ -251,15 +251,18 @@ export async function appendFoodLogToSheets(
 
   // Update the user's lastLogDate and streak in settings registry
   let streakCount = 1;
+  let isFirstLogOfToday = false;
   try {
     const phone = tabName.includes(' : ') ? tabName.split(' : ')[1] : tabName;
     const timestampStr = new Date().toLocaleString('en-US', { timeZoneName: 'short' });
     await updateLastLogDate(phone, timestampStr);
-    streakCount = await updateUserStreak(phone);
+    const streakResult = await updateUserStreak(phone);
+    streakCount = streakResult.streakCount;
+    isFirstLogOfToday = streakResult.isFirstLogOfToday;
   } catch (err) {
     console.error('Failed to update lastLogDate or streak count in appendFoodLogToSheets:', err);
   }
-  return { streakCount };
+  return { streakCount, isFirstLogOfToday };
 }
 
 export interface FoodLogRow {
@@ -1091,7 +1094,7 @@ export async function updateLastLogDate(phone: string, dateStr: string): Promise
  * Calculates and updates the user's consecutive food logging streak.
  * The streak increments on every logged meal, resetting to 1 if a calendar day is skipped.
  */
-export async function updateUserStreak(phone: string): Promise<number> {
+export async function updateUserStreak(phone: string): Promise<{ streakCount: number; isFirstLogOfToday: boolean }> {
   const settingsMap = await getUserSettingsMap();
   const cleanPhone = phone.replace(/[^\d]/g, '');
   const userSettings = settingsMap.get(cleanPhone);
@@ -1122,16 +1125,20 @@ export async function updateUserStreak(phone: string): Promise<number> {
   }
   
   let newStreak = 1;
+  let isFirstLogOfToday = false;
   
   if (lastActive === todayStr) {
-    // Already logged today: user chose to stack/increment on every single logged meal!
-    newStreak = currentStreak + 1;
+    // Already logged today: keep current streak, not first log of today
+    newStreak = currentStreak;
+    isFirstLogOfToday = false;
   } else if (lastActive === yesterdayStr) {
     // Logged yesterday: increment streak
     newStreak = currentStreak + 1;
+    isFirstLogOfToday = true;
   } else {
     // Skipped a day or brand new user: reset to 1
     newStreak = 1;
+    isFirstLogOfToday = true;
   }
   
   const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
@@ -1186,7 +1193,7 @@ export async function updateUserStreak(phone: string): Promise<number> {
     }
   }
   
-  return newStreak;
+  return { streakCount: newStreak, isFirstLogOfToday };
 }
 
 /**

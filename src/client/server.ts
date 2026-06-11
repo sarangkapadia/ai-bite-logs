@@ -491,7 +491,10 @@ To get started, simply send me a photo of your next meal! 🥗
 
   // Case 2: Media is present. Run the pipeline.
   // 1. Reply to Twilio instantly to prevent timeout
-  res.status(200).send(createTwiMLReply("📸 *Got your photo!* Analyzing ingredients and logging macros... 🍳"));
+  const gotPhotosMsg = numMediaCount > 1 
+    ? `📸 *Got your ${numMediaCount} photos!* Analyzing ingredients and logging macros... 🍳`
+    : `📸 *Got your photo!* Analyzing ingredients and logging macros... 🍳`;
+  res.status(200).send(createTwiMLReply(gotPhotosMsg));
 
   // 2. Run the heavy pipeline in the background
   (async () => {

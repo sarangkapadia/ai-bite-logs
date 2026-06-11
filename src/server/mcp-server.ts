@@ -238,9 +238,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Perform Sheets log append in background asynchronously to prevent block
       appendFoodLogToSheets(nutritionInfo, undefined, tabName)
         .then(async (res) => {
-          console.error(`[MCP Background Task] Appended log for ${phone}. User streak is now ${res.streakCount}`);
-          const streakMsg = `🔥 *Streak:* That's ${res.streakCount} meals logged consecutively! Keep up the momentum! 💪`;
-          await sendProactiveWhatsAppMessage(phone, streakMsg);
+          console.error(`[MCP Background Task] Appended log for ${phone}. User streak is now ${res.streakCount}. First log of today: ${res.isFirstLogOfToday}`);
+          if (res.isFirstLogOfToday) {
+            const streakMsg = `🔥 *Streak:* That's ${res.streakCount} days logged consecutively! Keep up the momentum! 💪`;
+            await sendProactiveWhatsAppMessage(phone, streakMsg);
+          }
         })
         .catch(err => {
           console.error(`[MCP Background Task] Failed to append log to sheets for user "${tabName}":`, err);
