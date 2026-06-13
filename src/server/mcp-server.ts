@@ -272,11 +272,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const fatBar = makeMacroBar(nutritionInfo.fatGrams, 10, "🟥");
 
       const replyBody =
-        `${emojiHeader} *Food Logged!*
-${imageNote}
-
-🥗 *Meal:* *${nutritionInfo.foodName}*
-📊 *Status:* ${healthIndicator}
+        `${emojiHeader} *Meal:* *${nutritionInfo.foodName}*
+${imageNote ? imageNote + "\n\n" : ""}📊 *Status:* ${healthIndicator}
 🔥 *Calories:* ~${nutritionInfo.calories} kcal
 
 🥩 *Macros:*
