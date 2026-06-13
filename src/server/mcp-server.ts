@@ -218,8 +218,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           allIngredientsVerified = false;
         }
 
+        const badge = item.verified ? "✓" : "🤖";
         ingredientDetailsList.push(
-          `• ${item.name} (${item.weight}g): ${item.cal} kcal (P: ${item.prot}g | C: ${item.carb}g | F: ${item.fatVal}g)`
+          `• ${badge} ${item.name} (${item.weight}g): ${item.cal} kcal (P: ${item.prot}g | C: ${item.carb}g | F: ${item.fatVal}g)`
         );
       }
 
@@ -261,6 +262,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ? "📊 *Data Source:* Verified by USDA FoodData Central"
         : "⚠️ *Data Source:* Mixed (Includes AI-estimated approximations)";
 
+      const makeMacroBar = (grams: number, scale: number, emoji: string): string => {
+        const count = Math.max(0, Math.round(grams / scale));
+        return count > 0 ? ` ${emoji.repeat(count)}` : "";
+      };
+
+      const proteinBar = makeMacroBar(nutritionInfo.proteinGrams, 10, "🟩");
+      const carbsBar = makeMacroBar(nutritionInfo.carbsGrams, 10, "🟨");
+      const fatBar = makeMacroBar(nutritionInfo.fatGrams, 10, "🟥");
+
       const replyBody =
         `${emojiHeader} *Food Logged!*
 ${imageNote}
@@ -270,7 +280,9 @@ ${imageNote}
 🔥 *Calories:* ~${nutritionInfo.calories} kcal
 
 🥩 *Macros:*
-• Protein: ${nutritionInfo.proteinGrams}g | Carbs: ${nutritionInfo.carbsGrams}g | Fat: ${nutritionInfo.fatGrams}g
+• Protein: ${nutritionInfo.proteinGrams}g${proteinBar}
+• Carbs: ${nutritionInfo.carbsGrams}g${carbsBar}
+• Fat: ${nutritionInfo.fatGrams}g${fatBar}
 
 🌾 *Ingredients:*
 ${ingredientDetailsList.join("\n")}
@@ -281,7 +293,9 @@ _${nutritionInfo.briefExplanation}_
 🎭 *Daily Bite:*
 _${nutritionInfo.foodJoke}_
 
-${attributionNotice}`;
+${attributionNotice}
+
+💡 _Ask me any follow-up questions about this meal, or reply *summary* to view your daily progress._`;
 
       return {
         content: [{ type: "text", text: replyBody }]
