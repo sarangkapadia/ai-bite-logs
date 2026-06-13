@@ -290,9 +290,6 @@ ${ingredientDetailsList.join("\n")}
 📝 *Coach's Note:*
 _${nutritionInfo.briefExplanation}_
 
-🎭 *Daily Bite:*
-_${nutritionInfo.foodJoke}_
-
 ${attributionNotice}
 
 💡 _Ask me any follow-up questions about this meal, or reply *summary* to view your daily progress._`;
