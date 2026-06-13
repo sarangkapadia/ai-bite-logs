@@ -132,6 +132,18 @@ export async function downloadTwilioMedia(
 }
 
 /**
+ * Appends the BiteCoach branding footer to the message text if not already present.
+ */
+export function applyBiteCoachBranding(text: string): string {
+  const branding = '\n\n🤖 *BiteCoach*';
+  if (!text) return text;
+  if (text.includes('BiteCoach')) {
+    return text;
+  }
+  return text + branding;
+}
+
+/**
  * Generates the TwiML XML string to respond to Twilio's incoming message webhook.
  * Supports optional media attachment (e.g. daily summary charts).
  * 
@@ -142,7 +154,8 @@ export function createTwiMLReply(textBody: string, mediaUrl?: string): string {
   trackOutgoingMessage();
   const MessagingResponse = twilio.twiml.MessagingResponse;
   const response = new MessagingResponse();
-  const msg = response.message(textBody);
+  const brandedBody = applyBiteCoachBranding(textBody);
+  const msg = response.message(brandedBody);
   if (mediaUrl) {
     msg.media(mediaUrl);
   }
@@ -202,8 +215,9 @@ export async function sendProactiveWhatsAppMessage(
 
   try {
     const client = twilio(accountSid, authToken);
+    const brandedBody = applyBiteCoachBranding(body);
     const msgParams: any = {
-      body: body,
+      body: brandedBody,
       from: formattedFrom,
       to: formattedTo,
     };
@@ -220,3 +234,4 @@ export async function sendProactiveWhatsAppMessage(
     throw error;
   }
 }
+
