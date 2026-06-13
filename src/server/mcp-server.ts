@@ -263,7 +263,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         : "⚠️ *Data Source:* Mixed (Includes AI-estimated approximations)";
 
       const makeMacroBar = (grams: number, scale: number, emoji: string): string => {
-        const count = Math.min(10, Math.max(0, Math.round(grams / scale)));
+        const count = Math.min(8, Math.max(0, Math.round(grams / scale)));
         return count > 0 ? ` ${emoji.repeat(count)}` : "";
       };
 
