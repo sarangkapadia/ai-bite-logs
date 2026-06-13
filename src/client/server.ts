@@ -435,7 +435,7 @@ You have successfully opted in! I will proactively text you your personalized nu
 
     if (isWelcomeRequest) {
       const promptMsg =
-        `📸 *Welcome to Food Tracker!* 🍳
+        `📸 *Welcome to BiteCoach!* 🍳
 
 I am your personal AI health coach! Send me photos of your meals to track your nutrition instantly.
 

@@ -14,7 +14,7 @@ const RED_PIXEL_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 async function main() {
-  console.log('======= Local Food Tracker Verification Test =======');
+  console.log('======= Local BiteCoach Verification Test =======');
 
   const args = process.argv.slice(2);
   const targetImagePath = args[0];
