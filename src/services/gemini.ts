@@ -30,6 +30,8 @@ export interface FoodNutritionInfo {
   suggestedEmoji: string;
   foodJoke: string;
   ingredients?: FoodIngredientInfo[];
+  requiresClarification?: boolean;
+  clarificationQuestions?: string[];
 }
 
 export interface FoodImageInput {
@@ -174,6 +176,8 @@ export async function analyzeFoodImage(
           * Use ☕ or 🍵 if it is coffee, tea, or a morning hot beverage.
           * Otherwise, use a standard representing food/drink emoji (like 🍕, 🍔, 🌮, 🍳, 🥤) that fits the category.
        - foodJoke: A short, funny, and clean food-related joke or pun. Make it highly contextual or relevant to the specific food items identified (e.g., if spaghetti or pasta, use a noodle pun like 'What do you call a fake noodle? An impasta!'). Keep it short (Q&A format or single line).
+       - requiresClarification: Boolean. Set to true if there is moderate ambiguity or uncertainty about the specific ingredients, preparation method, or portion sizes in the image (e.g., you can see it is a curry, but you are not sure if it is chicken or tofu; or you cannot determine the portion size/weight accurately). Set to false if you are highly confident in the ingredients and portion estimation. CRITICAL: Only set to true if you are reasonably certain it is food (so uncertainty is below a threshold), but you need help with specific details/ambiguities.
+       - clarificationQuestions: An array of 1 to 3 highly contextual, brief clarification questions to ask the user (e.g., "Is that chicken or tofu?", "Was it cooked in butter or olive oil?"). Only populate this array if requiresClarification is true.
        
     3. If food/drink IS NOT present (foodDetected is false):
        - Set foodName to "N/A"
@@ -183,6 +187,8 @@ export async function analyzeFoodImage(
        - Set briefExplanation to "No food detected in image."
        - Set suggestedEmoji to "🔍"
        - Set foodJoke to "Why did the tomato blush? Because it saw the salad dressing!"
+       - Set requiresClarification to false
+       - Set clarificationQuestions to []
   `;
 
   const contentsList: Array<string | Record<string, any>> = [];
@@ -220,6 +226,12 @@ export async function analyzeFoodImage(
             briefExplanation: { type: 'STRING' },
             suggestedEmoji: { type: 'STRING' },
             foodJoke: { type: 'STRING' },
+            requiresClarification: { type: 'BOOLEAN' },
+            clarificationQuestions: {
+              type: 'ARRAY',
+              description: 'List of 1 to 3 clarification questions if requiresClarification is true.',
+              items: { type: 'STRING' }
+            },
             ingredients: {
               type: 'ARRAY',
               description: 'List of individual food ingredients detected.',
@@ -257,7 +269,9 @@ export async function analyzeFoodImage(
             'briefExplanation',
             'suggestedEmoji',
             'foodJoke',
-            'ingredients'
+            'ingredients',
+            'requiresClarification',
+            'clarificationQuestions'
           ],
         },
       },

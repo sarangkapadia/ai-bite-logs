@@ -165,6 +165,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      // If the model is unsure about ingredients/portions, ask clarification questions
+      if (nutritionInfo.requiresClarification && nutritionInfo.clarificationQuestions && nutritionInfo.clarificationQuestions.length > 0) {
+        const questionsList = nutritionInfo.clarificationQuestions.map((q, idx) => `• ${q}`).join('\n');
+        const replyMsg = `🤔 *BiteCoach is a bit unsure about a few details:*
+
+${questionsList}
+
+✍️ _Please reply to this message with your answers (e.g. "It's chicken, cooked in olive oil") to help me log it accurately!_`;
+
+        return {
+          content: [{ type: "text", text: replyMsg }]
+        };
+      }
+
       // Query USDA API for each ingredient in parallel, falling back to AI estimated values if API fails or no match is found.
       const ingredients = nutritionInfo.ingredients || [];
       let totalCalories = 0;
