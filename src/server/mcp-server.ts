@@ -175,8 +175,9 @@ ${questionsList}
 ✍️ _Please reply to this message with your answers (e.g. "It's chicken, cooked in olive oil") to help me log it accurately!_`;
 
         return {
-          content: [{ type: "text", text: replyMsg }]
-        };
+          content: [{ type: "text", text: replyMsg }],
+          requiresClarification: true
+        } as any;
       }
 
       // Query USDA API for each ingredient in parallel, falling back to AI estimated values if API fails or no match is found.

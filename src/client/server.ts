@@ -244,6 +244,38 @@ async function callMcpToolDetailed(name: string, args: any): Promise<any> {
   return response;
 }
 
+interface PendingClarification {
+  images: { base64: string; mimeType: string }[];
+  timestamp: number;
+}
+
+const pendingClarifications = new Map<string, PendingClarification>();
+const PENDING_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
+
+function savePendingImages(phone: string, images: { base64: string; mimeType: string }[]) {
+  const cleanPhone = phone.replace(/[^\d]/g, '');
+  pendingClarifications.set(cleanPhone, {
+    images,
+    timestamp: Date.now()
+  });
+}
+
+function getPendingImages(phone: string): { base64: string; mimeType: string }[] | null {
+  const cleanPhone = phone.replace(/[^\d]/g, '');
+  const pending = pendingClarifications.get(cleanPhone);
+  if (!pending) return null;
+  if (Date.now() - pending.timestamp > PENDING_TIMEOUT_MS) {
+    pendingClarifications.delete(cleanPhone);
+    return null;
+  }
+  return pending.images;
+}
+
+function clearPendingImages(phone: string) {
+  const cleanPhone = phone.replace(/[^\d]/g, '');
+  pendingClarifications.delete(cleanPhone);
+}
+
 // The main webhook route that receives messages from Twilio
 app.post('/webhook', webhookMiddleware, async (req, res) => {
   console.log('[Webhook Server] --- Received incoming webhook request ---');
@@ -458,6 +490,39 @@ To get started, simply send me a photo of your next meal! 🥗
       return res.status(200).send(createTwiMLReply(promptMsg));
     }
 
+    // Check if there is a pending food log image for this user.
+    // If yes, treat the text message as a reply/clarification for that food log instead of a new question!
+    const pendingImages = getPendingImages(cleanedSender);
+    if (pendingImages && pendingImages.length > 0) {
+      res.status(200).send(createTwiMLReply("🍳 *Got your details!* Re-analyzing food with your details... 🔍"));
+
+      (async () => {
+        try {
+          console.log(`[Webhook Server] Clarification response received from ${cleanedSender}: "${Body}". Re-processing...`);
+          const responseObj = await callMcpToolDetailed("log_food_item", {
+            phone: cleanedSender,
+            profileName,
+            images: pendingImages,
+            caption: Body
+          });
+
+          const replyBody = responseObj.content?.[0]?.text || '';
+          await sendProactiveWhatsAppMessage(From, replyBody, undefined, AccountSid);
+
+          if (!responseObj.requiresClarification) {
+            clearPendingImages(cleanedSender);
+          } else {
+            // Refresh/update timestamp
+            savePendingImages(cleanedSender, pendingImages);
+          }
+        } catch (err) {
+          console.error('[Webhook Server] Error processing pending food log clarification:', err);
+          await sendProactiveWhatsAppMessage(From, "⚠️ Sorry, I ran into an error processing your clarification. Please try again!", undefined, AccountSid);
+        }
+      })();
+      return;
+    }
+
     // Treat unknown/general text as a natural language query about their logs
     // 1. Reply to Twilio instantly to prevent timeout
     res.status(200).send(createTwiMLReply("⏳ *Looking up your food logs...* Let me check that for you! 🔍"));
@@ -526,15 +591,22 @@ To get started, simply send me a photo of your next meal! 🥗
       }
 
       console.log('[Webhook Server] Sending food images to Gemini via MCP Server for unified analysis...');
-      const replyBody = await callMcpTool("log_food_item", {
+      const responseObj = await callMcpToolDetailed("log_food_item", {
         phone: cleanedSender,
         profileName,
         images: imageInputs,
         caption: Body
       });
 
+      const replyBody = responseObj.content?.[0]?.text || '';
       // Send response to the user first
       await sendProactiveWhatsAppMessage(From, replyBody, undefined, AccountSid);
+
+      if (responseObj.requiresClarification) {
+        savePendingImages(cleanedSender, imageInputs);
+      } else {
+        clearPendingImages(cleanedSender);
+      }
 
     } catch (error: any) {
       console.error('[Webhook Server] Error during async webhook pipeline processing:', error);
