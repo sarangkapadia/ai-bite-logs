@@ -16,7 +16,8 @@ import {
 import {
   appendFoodLogToSheets,
   getUserLogRows,
-  optOutUser
+  optOutUser,
+  getAllUserTabs
 } from "../services/sheets";
 import { sendProactiveWhatsAppMessage } from "../services/twilio";
 
@@ -119,6 +120,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+/**
+ * Resolves the actual tab name in Google Sheets for a given phone number.
+ * If a tab like "Sarang : +14082300841" already exists, returns it.
+ * Otherwise, falls back to the default "FirstName : Phone" pattern.
+ */
+async function resolveTabName(phone: string, profileName: string): Promise<string> {
+  try {
+    const activeTabs = await getAllUserTabs();
+    const cleanPhone = phone.replace(/[^\d]/g, '');
+    const matchedTab = activeTabs.find(tab => tab.title.replace(/[^\d]/g, '').endsWith(cleanPhone));
+    if (matchedTab) {
+      return matchedTab.title;
+    }
+  } catch (err) {
+    console.error('[MCP Server] Error checking active user tabs:', err);
+  }
+  const firstName = profileName.trim().split(/\s+/)[0];
+  return `${firstName} : ${phone}`;
+}
+
 // Handle tool execution
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
@@ -126,8 +147,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     if (name === "log_food_item") {
       const { phone, profileName, images = [], caption } = args as any;
-      const firstName = profileName.trim().split(/\s+/)[0];
-      const tabName = `${firstName} : ${phone}`;
+      const tabName = await resolveTabName(phone, profileName);
 
       if (images.length === 0) {
         return {
@@ -298,8 +318,7 @@ ${attributionNotice}
 
     if (name === "get_daily_summary") {
       const { phone, profileName, dateString, allowFallbackDays = 1 } = args as any;
-      const firstName = profileName.trim().split(/\s+/)[0];
-      const tabName = `${firstName} : ${phone}`;
+      const tabName = await resolveTabName(phone, profileName);
 
       const logs = await getUserLogRows(tabName);
       if (logs.length === 0) {
@@ -361,8 +380,7 @@ ${attributionNotice}
 
     if (name === "query_history") {
       const { phone, profileName, query } = args as any;
-      const firstName = profileName.trim().split(/\s+/)[0];
-      const tabName = `${firstName} : ${phone}`;
+      const tabName = await resolveTabName(phone, profileName);
 
       const logs = await getUserLogRows(tabName);
       if (logs.length === 0) {
@@ -387,8 +405,7 @@ ${attributionNotice}
 
     if (name === "get_inactivity_inspiration") {
       const { phone, profileName } = args as any;
-      const firstName = profileName.trim().split(/\s+/)[0];
-      const tabName = `${firstName} : ${phone}`;
+      const tabName = await resolveTabName(phone, profileName);
 
       const logs = await getUserLogRows(tabName);
       if (logs.length === 0) {

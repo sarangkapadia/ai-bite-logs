@@ -131,16 +131,21 @@ export async function downloadTwilioMedia(
   }
 }
 
-/**
- * Appends the BiteCoach branding footer to the message text if not already present.
- */
 export function applyBiteCoachBranding(text: string): string {
   const branding = '\n\n🤖 *BiteCoach*';
   if (!text) return text;
-  if (text.includes('BiteCoach')) {
-    return text;
+  
+  let result = text;
+  if (!text.includes('BiteCoach')) {
+    result = text + branding;
   }
-  return text + branding;
+  
+  // Enforce Twilio's 1600 character WhatsApp limit
+  if (result.length > 1600) {
+    const truncateSuffix = '...\n\n🤖 *BiteCoach*';
+    result = result.substring(0, 1600 - truncateSuffix.length) + truncateSuffix;
+  }
+  return result;
 }
 
 /**

@@ -408,6 +408,7 @@ export async function answerUserQuery(
        - Encourage them to log it next time they eat it.
     5. If the question is completely unrelated to food tracking, health coaching, or nutrition:
        - Politely state that you can only help answer questions regarding their nutrition history and health goals.
+    6. CRITICAL: The entire generated response must be extremely concise and strictly UNDER 1200 characters to prevent Twilio WhatsApp character limits from throwing errors.
   `;
 
   const operation = async () => {
