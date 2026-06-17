@@ -168,7 +168,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // If the model is unsure about ingredients/portions, ask clarification questions
       if (nutritionInfo.requiresClarification && nutritionInfo.clarificationQuestions && nutritionInfo.clarificationQuestions.length > 0) {
         const questionsList = nutritionInfo.clarificationQuestions.map((q, idx) => `• ${q}`).join('\n');
-        const replyMsg = `🤔 *BiteCoach is a bit unsure about a few details:*
+        const replyMsg = `🤔 *BiteCoach would like to clarify a few details to log this with maximum accuracy:*
 
 ${questionsList}
 
