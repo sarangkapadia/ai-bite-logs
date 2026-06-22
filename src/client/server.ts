@@ -276,6 +276,62 @@ function clearPendingImages(phone: string) {
   pendingClarifications.delete(cleanPhone);
 }
 
+async function handleWebhookError(
+  err: any,
+  phone: string,
+  accountSid: string,
+  contextType: 'query' | 'log' | 'clarification'
+): Promise<void> {
+  const errStr = (err.message || '') + ' ' + (err.status || '') + ' ' + JSON.stringify(err);
+  
+  // 1. Check for rate limit (429)
+  const isRateLimit = errStr.includes('429') ||
+    errStr.toLowerCase().includes('resource_exhausted') ||
+    errStr.toLowerCase().includes('resource exhausted') ||
+    errStr.toLowerCase().includes('quota exceeded');
+
+  if (isRateLimit) {
+    let limitMsg = "⚠️ *Slow down!* 🏃‍♂️ BiteCoach is currently catching its breath. Give me a minute and try again! 🧘‍♂️";
+    if (contextType === 'log') {
+      limitMsg = "⚠️ *Whoa, slow down!* 🛑 BiteCoach is suffering from brain freeze from analyzing too much delicious food. 🧠🍦 Give me a minute to thaw out and try sending your photo again! 📸";
+    }
+    await sendProactiveWhatsAppMessage(phone, limitMsg, undefined, accountSid);
+    return;
+  }
+
+  // 2. Check for other transient/recoverable errors
+  const isRecoverable = errStr.includes('500') ||
+    errStr.includes('503') ||
+    errStr.includes('504') ||
+    errStr.toLowerCase().includes('fetch failed') ||
+    errStr.toLowerCase().includes('socket') ||
+    errStr.toLowerCase().includes('network') ||
+    errStr.toLowerCase().includes('timeout') ||
+    errStr.toLowerCase().includes('econnreset') ||
+    errStr.toLowerCase().includes('busy') ||
+    errStr.toLowerCase().includes('unavailable');
+
+  if (isRecoverable) {
+    let retryMsg = "🍳 *Oops, the kitchen timer went off early!* ⏰ Something went wrong on our end, but it's a quick hiccup. Please give it another go in a few seconds! 🧑‍🍳";
+    if (contextType === 'log') {
+      retryMsg = "🍳 *Oops, the kitchen timer went off early!* ⏰ Something went wrong on our end, but it's a quick hiccup. Please try sending your photo again in a few seconds! 🧑‍🍳";
+    } else if (contextType === 'clarification') {
+      retryMsg = "🍳 *Oops, the kitchen timer went off early!* ⏰ Something went wrong processing your details. Please send your answers again! 🧑‍🍳";
+    }
+    await sendProactiveWhatsAppMessage(phone, retryMsg, undefined, accountSid);
+    return;
+  }
+
+  // 3. Unrecoverable / critical errors
+  let errMsg = "⚠️ Sorry, BiteCoach encountered an issue looking up your request. Please try again in a moment!";
+  if (contextType === 'log') {
+    errMsg = "⚠️ Sorry, BiteCoach encountered a critical issue saving your meal. Please check configuration settings and try again! 🛠️";
+  } else if (contextType === 'clarification') {
+    errMsg = "⚠️ Sorry, BiteCoach ran into a critical error processing your clarification response. Please try sending it again! 🛠️";
+  }
+  await sendProactiveWhatsAppMessage(phone, errMsg, undefined, accountSid);
+}
+
 // The main webhook route that receives messages from Twilio
 app.post('/webhook', webhookMiddleware, async (req, res) => {
   console.log('[Webhook Server] --- Received incoming webhook request ---');
@@ -517,7 +573,7 @@ To get started, simply send me a photo of your next meal! 🥗
           }
         } catch (err) {
           console.error('[Webhook Server] Error processing pending food log clarification:', err);
-          await sendProactiveWhatsAppMessage(From, "⚠️ Sorry, I ran into an error processing your clarification. Please try again!", undefined, AccountSid);
+          await handleWebhookError(err, From, AccountSid, 'clarification');
         }
       })();
       return;
@@ -535,20 +591,7 @@ To get started, simply send me a photo of your next meal! 🥗
         await sendProactiveWhatsAppMessage(From, answer, undefined, AccountSid);
       } catch (err: any) {
         console.error('[Webhook Server] Error answering user log query in background:', err);
-        const errStr = (err.message || '') + ' ' + (err.status || '') + ' ' + JSON.stringify(err);
-        const isRateLimit = errStr.includes('429') ||
-          errStr.toLowerCase().includes('resource_exhausted') ||
-          errStr.toLowerCase().includes('resource exhausted') ||
-          errStr.toLowerCase().includes('quota exceeded');
-
-        if (isRateLimit) {
-          const limitMsg = "⚠️ *Slow down!* 🏃‍♂️ The AI coach is currently catching its breath. Give me a minute and ask your question again! 🧘‍♂️";
-          await sendProactiveWhatsAppMessage(From, limitMsg, undefined, AccountSid);
-          return;
-        }
-
-        const errMsg = "⚠️ Sorry, I ran into an error looking up your request. Please try again in a moment!";
-        await sendProactiveWhatsAppMessage(From, errMsg, undefined, AccountSid);
+        await handleWebhookError(err, From, AccountSid, 'query');
       }
     })();
     return;
@@ -610,23 +653,7 @@ To get started, simply send me a photo of your next meal! 🥗
 
     } catch (error: any) {
       console.error('[Webhook Server] Error during async webhook pipeline processing:', error);
-
-      const errStr = (error.message || '') + ' ' + (error.status || '') + ' ' + JSON.stringify(error);
-      const isRateLimit = errStr.includes('429') ||
-        errStr.toLowerCase().includes('resource_exhausted') ||
-        errStr.toLowerCase().includes('resource exhausted') ||
-        errStr.toLowerCase().includes('quota exceeded');
-
-      if (isRateLimit) {
-        const funnyMsg = "⚠️ *Whoa, slow down!* 🛑 Gemini is suffering from brain freeze from analyzing too much delicious food. 🧠🍦 Give me a minute to thaw out and try sending your photo again! 📸";
-        await sendProactiveWhatsAppMessage(From, funnyMsg, undefined, AccountSid);
-        return;
-      }
-
-      const errorMsg =
-        "⚠️ Sorry, I encountered an issue analyzing your image or saving it to the sheet. Please make sure your APIs are configured correctly and try again! 🛠️";
-
-      await sendProactiveWhatsAppMessage(From, errorMsg, undefined, AccountSid);
+      await handleWebhookError(error, From, AccountSid, 'log');
     }
   })();
 });
