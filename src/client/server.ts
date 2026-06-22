@@ -645,11 +645,9 @@ async function runDailyAutoSummaryJob(): Promise<void> {
   }
 
   isDailySummaryJobRunning = true;
-  console.log('[Scheduler] Executing timezone-aware auto-summary check...');
   try {
     const activeTabs = await getAllUserTabs();
     const settingsMap = await getUserSettingsMap();
-    console.log(`[Scheduler] Checking ${activeTabs.length} active account tab(s) against registered settings.`);
 
     for (const tab of activeTabs) {
       const tabTitle = tab.title; // e.g. "Sarang : +14082300841"
@@ -799,7 +797,6 @@ async function runDailyAutoSummaryJob(): Promise<void> {
         }
       }
     }
-    console.log('[Scheduler] Timezone-aware auto-summary check completed successfully.');
   } catch (error) {
     console.error('[Scheduler] Error running daily auto-summary job:', error);
   } finally {
