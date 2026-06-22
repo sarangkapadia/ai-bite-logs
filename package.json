@@ -9,7 +9,8 @@
     "build": "tsc",
     "start": "node dist/client/server.js",
     "mcp-start": "node dist/server/mcp-server.js",
-    "test-local": "ts-node src/scratch/test-local.ts"
+    "test-local": "ts-node src/scratch/test-local.ts",
+    "error-report": "ts-node src/scratch/error-report.ts"
   },
   "keywords": [],
   "author": "",

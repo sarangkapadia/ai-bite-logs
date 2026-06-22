@@ -12,7 +12,8 @@ import {
   guessTimezoneFromPhone,
   updateLastInactivityCheck,
   updateLastLogDate,
-  updateUserTwilioAccountSid
+  updateUserTwilioAccountSid,
+  logErrorToSheets
 } from '../services/sheets';
 import { downloadTwilioMedia, createTwiMLReply, sendProactiveWhatsAppMessage } from '../services/twilio';
 import twilio from 'twilio';
@@ -283,6 +284,10 @@ async function handleWebhookError(
   contextType: 'query' | 'log' | 'clarification'
 ): Promise<void> {
   const errStr = (err.message || '') + ' ' + (err.status || '') + ' ' + JSON.stringify(err);
+  
+  // Log the error to Google Sheets in the background
+  logErrorToSheets(phone, contextType, err.message || String(err), err.stack || '')
+    .catch(sheetsErr => console.error('[Webhook Server] Failed writing error log to sheets:', sheetsErr));
   
   // 1. Check for rate limit (429)
   const isRateLimit = errStr.includes('429') ||

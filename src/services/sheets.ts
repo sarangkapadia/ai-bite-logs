@@ -1290,3 +1290,76 @@ export async function updateUserTwilioAccountSid(phone: string, twilioAccountSid
 
   await retryWithBackoff(operation);
 }
+
+/**
+ * Appends an error log entry to a dedicated "ErrorLogs" tab in the Google Spreadsheet.
+ */
+export async function logErrorToSheets(
+  phone: string,
+  context: string,
+  errorMessage: string,
+  errorStack: string = ''
+): Promise<void> {
+  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY;
+  if (!spreadsheetId || !clientEmail || !privateKey) return;
+
+  const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: formattedPrivateKey,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+  const sheets = google.sheets({ version: 'v4', auth });
+
+  const operation = async () => {
+    const tabName = 'ErrorLogs';
+
+    // 1. Ensure "ErrorLogs" sheet exists
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const existingSheetTitles = spreadsheet.data.sheets?.map(s => s.properties?.title) || [];
+
+    if (!existingSheetTitles.includes(tabName)) {
+      console.log('ErrorLogs sheet not found. Creating programmatically...');
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              addSheet: {
+                properties: { title: tabName }
+              }
+            }
+          ]
+        }
+      });
+
+      // Write headers
+      const headers = [['Timestamp', 'User Phone', 'Context', 'Error Message', 'Stack Trace']];
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${tabName}!A1:E1`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: headers }
+      });
+    }
+
+    // 2. Append error details
+    const timestamp = new Date().toLocaleString('en-US', { timeZoneName: 'short' });
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${tabName}!A:E`,
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: {
+        values: [[timestamp, phone, context, errorMessage, errorStack]]
+      }
+    });
+  };
+
+  await retryWithBackoff(operation).catch(err => {
+    console.error('Failed to log error to sheets:', err);
+  });
+}
+
