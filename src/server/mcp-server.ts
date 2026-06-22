@@ -455,16 +455,13 @@ app.use(bodyParser.json({ limit: '50mb' }));
 
 const transports: Record<string, SSEServerTransport> = {};
 
-// SSE endpoint to establish the connection stream
 app.get("/sse", async (req, res) => {
-  console.error("[MCP Server] Received GET request to /sse (establishing SSE stream)");
   try {
     const transport = new SSEServerTransport("/messages", res);
     const sessionId = transport.sessionId;
     transports[sessionId] = transport;
 
     transport.onclose = () => {
-      console.error(`[MCP Server] SSE transport closed for session ${sessionId}`);
       delete transports[sessionId];
     };
 
