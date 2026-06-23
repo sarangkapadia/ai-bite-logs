@@ -142,12 +142,52 @@ export async function analyzeFoodImage(
     throw new Error('At least one image must be provided for food analysis.');
   }
 
+  const contentsList: Array<string | Record<string, any>> = [];
+
+  for (const img of images) {
+    contentsList.push({
+      inlineData: {
+        data: img.base64,
+        mimeType: img.mimeType,
+      },
+    });
+  }
+
+  // Step 1: Pre-process with Google Search Grounding to detect packaging/branded product weights.
+  let searchGroundingResult = 'No commercial branding detected.';
+  try {
+    const searchPrompt = `
+      Analyze the provided food image(s). If there are any packaged, commercial, or branded food/drink items (e.g., Almond Joy candy bar, Coca-Cola can, Reese's cups, branded snacks, restaurant chain food), use Google Search to find their standard commercial weights or standard portion sizes in grams.
+      Return a brief, bulleted summary of standard sizes and weights found.
+      If there are no commercial/branded items or it is a home-cooked unbranded meal, simply reply: "No commercial branding detected."
+    `;
+
+    const searchContents = [...contentsList, searchPrompt];
+
+    const searchResponse = await generateContentWithFallback({
+      contents: searchContents,
+      config: {
+        tools: [{ googleSearch: {} }]
+      }
+    }, VISION_MODELS);
+
+    if (searchResponse.text && !searchResponse.text.includes('No commercial branding detected')) {
+      searchGroundingResult = searchResponse.text;
+      console.log('[Gemini API] Google Search Sizing Grounding Context obtained:\n', searchGroundingResult);
+    }
+  } catch (err) {
+    console.error('[Gemini API] Failed running Google Search Sizing Grounding (skipping to default estimation):', err);
+  }
+
   const prompt = `
     Analyze the provided image(s) to see if they contain any food or drink.
     If multiple images are provided, treat them as parts of a single, unified meal (e.g. main dish in image 1, side dish in image 2, beverage in image 3).
     
     CRITICAL: The user has attached additional caption context/metadata along with the photo. You MUST take this into account when estimating ingredients, sizes, portions, or customization (e.g., if they say "only ate half", "sugar-free", "double protein", "oat milk instead of whole milk").
     User Attached Context: "${userCaption || 'None'}"
+
+    CRITICAL SIZING RULE: Pay close attention to standard commercial packaging size indicators in the image (e.g., "Fun Size", "Miniature", "Single Serving", "Share Size") and cross-reference them with the provided Google Search Sizing Context. If a commercial branded item is detected, use the weights from the Search Sizing Context that best fit the visual scale of the product in the image.
+    Google Search Sizing Context: "${searchGroundingResult}"
     
     1. Determine if food/drink is present:
        - Set 'foodDetected' to true if food or beverage is visible in any of the images or described in the context.
@@ -191,22 +231,12 @@ export async function analyzeFoodImage(
        - Set clarificationQuestions to []
   `;
 
-  const contentsList: Array<string | Record<string, any>> = [];
+  const finalContentsList = [...contentsList, prompt];
 
-  for (const img of images) {
-    contentsList.push({
-      inlineData: {
-        data: img.base64,
-        mimeType: img.mimeType,
-      },
-    });
-  }
-
-  contentsList.push(prompt);
 
   const operation = async () => {
     const response = await generateContentWithFallback({
-      contents: contentsList,
+      contents: finalContentsList,
       config: {
         temperature: 0.0,
         responseMimeType: 'application/json',
